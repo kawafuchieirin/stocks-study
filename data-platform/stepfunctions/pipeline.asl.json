@@ -1,0 +1,179 @@
+{
+  "Comment": "stocks-study データパイプライン: Ingest → Transform → Enrich → Catalog更新",
+  "StartAt": "IngestMaster",
+  "States": {
+    "IngestMaster": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${lambda_ingest_arn}",
+        "Payload": {
+          "data_type": "master"
+        }
+      },
+      "ResultPath": "$.ingest_master",
+      "Retry": [
+        {
+          "ErrorEquals": ["Lambda.ServiceException", "Lambda.AWSLambdaException", "Lambda.SdkClientException"],
+          "IntervalSeconds": 60,
+          "MaxAttempts": 2,
+          "BackoffRate": 2.0
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "Next": "HandleError",
+          "ResultPath": "$.error"
+        }
+      ],
+      "Next": "WaitAfterMaster"
+    },
+    "WaitAfterMaster": {
+      "Type": "Wait",
+      "Seconds": 15,
+      "Comment": "J-Quants Freeプランのレート制限対策（5回/分）",
+      "Next": "IngestDaily"
+    },
+    "IngestDaily": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${lambda_ingest_arn}",
+        "Payload": {
+          "data_type": "daily"
+        }
+      },
+      "ResultPath": "$.ingest_daily",
+      "Retry": [
+        {
+          "ErrorEquals": ["Lambda.ServiceException", "Lambda.AWSLambdaException", "Lambda.SdkClientException"],
+          "IntervalSeconds": 60,
+          "MaxAttempts": 2,
+          "BackoffRate": 2.0
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "Next": "HandleError",
+          "ResultPath": "$.error"
+        }
+      ],
+      "Next": "WaitAfterDaily"
+    },
+    "WaitAfterDaily": {
+      "Type": "Wait",
+      "Seconds": 15,
+      "Comment": "J-Quants Freeプランのレート制限対策（5回/分）",
+      "Next": "IngestFinancials"
+    },
+    "IngestFinancials": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${lambda_ingest_arn}",
+        "Payload": {
+          "data_type": "financials"
+        }
+      },
+      "ResultPath": "$.ingest_financials",
+      "Retry": [
+        {
+          "ErrorEquals": ["Lambda.ServiceException", "Lambda.AWSLambdaException", "Lambda.SdkClientException"],
+          "IntervalSeconds": 60,
+          "MaxAttempts": 2,
+          "BackoffRate": 2.0
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "Next": "HandleError",
+          "ResultPath": "$.error"
+        }
+      ],
+      "Next": "TransformData"
+    },
+    "TransformData": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::glue:startJobRun.sync",
+      "Parameters": {
+        "JobName": "${glue_transform_job_name}"
+      },
+      "ResultPath": "$.transform",
+      "Retry": [
+        {
+          "ErrorEquals": ["States.TaskFailed"],
+          "IntervalSeconds": 120,
+          "MaxAttempts": 1,
+          "BackoffRate": 2.0
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "Next": "HandleError",
+          "ResultPath": "$.error"
+        }
+      ],
+      "Next": "EnrichData"
+    },
+    "EnrichData": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::glue:startJobRun.sync",
+      "Parameters": {
+        "JobName": "${glue_enrich_job_name}"
+      },
+      "ResultPath": "$.enrich",
+      "Retry": [
+        {
+          "ErrorEquals": ["States.TaskFailed"],
+          "IntervalSeconds": 120,
+          "MaxAttempts": 1,
+          "BackoffRate": 2.0
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "Next": "HandleError",
+          "ResultPath": "$.error"
+        }
+      ],
+      "Next": "UpdateCatalog"
+    },
+    "UpdateCatalog": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:Glue:startCrawler",
+      "Parameters": {
+        "Name": "${glue_crawler_name}"
+      },
+      "ResultPath": "$.catalog",
+      "Retry": [
+        {
+          "ErrorEquals": ["Glue.CrawlerRunningException"],
+          "IntervalSeconds": 60,
+          "MaxAttempts": 3,
+          "BackoffRate": 2.0
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "Next": "HandleError",
+          "ResultPath": "$.error"
+        }
+      ],
+      "Next": "PipelineSuccess"
+    },
+    "PipelineSuccess": {
+      "Type": "Succeed"
+    },
+    "HandleError": {
+      "Type": "Fail",
+      "Error": "PipelineError",
+      "Cause": "パイプラインの実行中にエラーが発生しました。CloudWatch Logsを確認してください。"
+    }
+  }
+}

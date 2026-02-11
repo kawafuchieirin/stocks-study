@@ -43,3 +43,15 @@ poetry.lock
 .coverage
 htmlcov/
 .pytest_cache/
+
+# Terraform
+terraform/.terraform/
+terraform/.build/
+terraform/*.tfstate
+terraform/*.tfstate.backup
+terraform/.terraform.lock.hcl
+*.tfvars
+!*.tfvars.example
+
+# Lambda package
+data-platform/lambda/ingest/package/
