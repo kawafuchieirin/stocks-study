@@ -1,0 +1,45 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environment
+venv/
+.venv/
+
+# Node
+node_modules/
+dist/
+
+# Environment
+.env
+*.secret
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Data cache
+backend/data/
+
+# Logs
+*.log
+
+# Poetry
+poetry.lock
+
+# Coverage
+.coverage
+htmlcov/
+.pytest_cache/
